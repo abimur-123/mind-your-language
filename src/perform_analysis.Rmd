@@ -1,0 +1,210 @@
+---
+title: "Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(tidyverse)
+```
+
+Import that data and turn into factors,
+
+```{r}
+df <- read_csv("../data/clean_survey_data.csv")
+fac_df <- df %>% 
+  mutate(first_lang = as.factor(first_lang),
+         first_lang_time = as.factor(first_lang_time),
+         first_lang_method = as.factor(first_lang_method),
+         preference = as.factor(preference),
+         academic_background = as.factor(academic_background))
+
+# remove the time component
+dat <- fac_df %>% 
+  select(-time)
+```
+
+Get contingency table of first language and preferred language,
+
+```{r}
+# get counts of combined first language/preferred language pairs
+# note some combinations don't have a representative and so aren't in the table
+lang_pref_counts <- dat %>% 
+  group_by(first_lang, preference) %>% 
+  summarise(count=n())
+
+v <- lang_pref_counts$count
+
+# add 0 entries for missing pairs
+entries <- c(v[1:2], 0, v[3:8], 0, v[9:13], 0, v[14:15], 0, v[16:17])
+
+# turn list of entries into contingency table
+cont_tbl <- matrix(entries, ncol=3, byrow=TRUE)
+colnames(cont_tbl) <- unique(lang_pref_counts$preference)
+rownames(cont_tbl) <- unique(lang_pref_counts$first_lang)
+
+cont_tbl
+
+# write  to file
+save(cont_tbl, file="../results/dat/cont_tbl.rda")
+```
+
+
+Perform exact test,
+
+```{r}
+fisher.test(cont_tbl) %>% broom::tidy()
+```
+
+Encode data in terms of preferences,
+
+```{r}
+# dat with col for preference/non-preference (preference can be R OR Python)
+dat_has_pref <- dat %>% 
+  mutate(has_pref = ifelse(preference %in% c("R", "Python"), 1, 0),
+         has_pref = as.factor(has_pref))
+
+# dat with col for R preference -- 0 corresponds to Python preference or no preference
+dat_pref_R <- dat %>% 
+  mutate(pref_R = ifelse(preference == "R", 1, 0),
+         pref_R = as.factor(pref_R))
+
+# dat with col for Python preference -- 0 corresponds to R preference or no preference
+dat_pref_Py <- dat %>% 
+  mutate(pref_Py = ifelse(preference == "Python", 1, 0),
+         pref_Py = as.factor(pref_Py))
+```
+
+Running logistic regressions,
+
+**Having Preference Related to First Language**
+
+```{r warning=FALSE}
+dat_has_pref$first_lang <- relevel(dat_has_pref$first_lang, ref="R")
+
+# with  all confounders
+glm(has_pref ~ . - preference, family = binomial, data=dat_has_pref) %>% broom::tidy()
+
+glm(has_pref ~ . - preference - academic_background, family = binomial, data=dat_has_pref) %>% broom::tidy()
+
+glm(has_pref ~ . - preference - academic_background - first_lang_time, family = binomial, data=dat_has_pref) %>% broom::tidy()
+
+glm(has_pref ~ . - preference - academic_background - first_lang_time - first_lang_method, family = binomial, data=dat_has_pref) %>% broom::tidy()
+
+# no counfounders
+glm(has_pref ~ first_lang, family = binomial, data=dat_has_pref) %>% broom::tidy()
+```
+
+Try releveling `first_lang`,
+
+```{r warning=FALSE}
+dat_has_pref$first_lang <- relevel(dat_has_pref$first_lang, ref="Python")
+
+# with  all confounders
+glm(has_pref ~ . - preference, family = binomial, data=dat_has_pref) %>% broom::tidy()
+
+glm(has_pref ~ . - preference - academic_background, family = binomial, data=dat_has_pref) %>% broom::tidy()
+
+glm(has_pref ~ . - preference - academic_background - first_lang_time, family = binomial, data=dat_has_pref) %>% broom::tidy()
+
+glm(has_pref ~ . - preference - academic_background - first_lang_time - first_lang_method, family = binomial, data=dat_has_pref) %>% broom::tidy()
+
+# no counfounders
+glm(has_pref ~ first_lang, family = binomial, data=dat_has_pref) %>% broom::tidy()
+```
+
+
+Even as we remove confounders that appear to be highly insignificant, we see only modest decreases in the p-values of other variables. Ultimately, even just regressing on `first_lang` doesn't have any significant coefficients for either of the ways that we releveled it.
+
+
+**R Preference Related to First Language**
+
+```{r warning=FALSE}
+dat_pref_R$first_lang <- relevel(dat_pref_R$first_lang, ref="Python")
+
+# with confounders
+glm(pref_R ~ . -preference, family=binomial, data=dat_pref_R) %>% broom::tidy()
+
+# removing first lang learning method
+glm(pref_R ~ . -preference - first_lang_method, family=binomial, data=dat_pref_R) %>% broom::tidy()
+
+# remove time from learning first language
+glm(pref_R ~ . -preference - first_lang_method - first_lang_time, family=binomial, data=dat_pref_R) %>% broom::tidy()
+
+# remove academic background
+glm(pref_R ~ . -preference - first_lang_method - first_lang_time - academic_background, family=binomial, data=dat_pref_R) %>% broom::tidy()
+
+# no confounders
+glm(pref_R ~ first_lang, family=binomial, data=dat_pref_R) %>% broom::tidy()
+```
+
+Releveling,
+
+```{r warning=FALSE}
+dat_pref_R$first_lang <- relevel(dat_pref_R$first_lang, ref="Other")
+
+# with confounders
+glm(pref_R ~ . -preference, family=binomial, data=dat_pref_R) %>% broom::tidy()
+
+# removing first lang learning method
+glm(pref_R ~ . -preference - first_lang_method, family=binomial, data=dat_pref_R) %>% broom::tidy()
+
+# remove time from learning first language
+glm(pref_R ~ . -preference - first_lang_method - first_lang_time, family=binomial, data=dat_pref_R) %>% broom::tidy()
+
+# remove academic background
+glm(pref_R ~ . -preference - first_lang_method - first_lang_time - academic_background, family=binomial, data=dat_pref_R) %>% broom::tidy()
+
+# no confounders
+glm(pref_R ~ first_lang, family=binomial, data=dat_pref_R) %>% broom::tidy()
+```
+
+**Python Preference Related to First Language**
+
+```{r}
+dat_pref_Py$first_lang <- relevel(dat_pref_R$first_lang, ref="Other")
+
+# all confounders
+glm(pref_Py ~ . - preference, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+# remove time since first language learned
+glm(pref_Py ~ . - preference - first_lang_time, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+# remove academic background
+glm(pref_Py ~ . - preference - first_lang_time - academic_background, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+# remove method used to learn first language
+glm(pref_Py ~ . - preference - first_lang_time - academic_background - first_lang_method, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+# remove employment importance
+glm(pref_Py ~ first_lang, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+```
+
+Releveling,
+
+```{r}
+dat_pref_Py$first_lang <- relevel(dat_pref_R$first_lang, ref="R")
+
+# all confounders
+glm(pref_Py ~ . - preference, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+# remove time since first language learned
+glm(pref_Py ~ . - preference - first_lang_time, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+# remove academic background
+glm(pref_Py ~ . - preference - first_lang_time - academic_background, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+# remove method used to learn first language
+glm(pref_Py ~ . - preference - first_lang_time - academic_background - first_lang_method, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+# remove employment importance
+glm(pref_Py ~ first_lang, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+
+py_no_conf <- glm(pref_Py ~ first_lang, family=binomial, data=dat_pref_Py) %>% broom::tidy()
+save(py_no_conf, file="../results/dat/py_no_conf.rda")
+```
+
+

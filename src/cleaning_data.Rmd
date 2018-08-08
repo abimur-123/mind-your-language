@@ -1,0 +1,40 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(httr)
+library(tidyverse)
+```
+
+```{r}
+# import the raw data csv file
+df <- read_csv("../data/raw-survey-data.csv")
+colnames(df) <- c("time", "first_lang", "first_lang_time", "first_lang_method", "employ_import", "academic_background", "preference")
+clean_df <- df %>% 
+  # move languages having no more than two respondents list to "other"
+  mutate(first_lang=ifelse(!(first_lang %in% c("Python", "Java", "C", "C++", "R", "Matlab")), "Other", first_lang)) %>%  
+  # aggregate the other respondents to current category
+  mutate(first_lang_method=ifelse(first_lang_method=="High School Course", "Academic Course", first_lang_method)) %>% 
+  mutate(first_lang_method=ifelse(first_lang_method=="Work, Stack Overflow", "Online Course or Tutorial", first_lang_method)) %>% 
+  # aggregate the other respondents to current category
+  mutate(academic_background=ifelse(academic_background=="Physical Science (e.g. physics, biology, chemistry, earth sciences, non-software engineering)", "Physical Science", academic_background)) %>% 
+  mutate(academic_background=ifelse(academic_background=="Engineering", "Physical Science", academic_background)) %>% 
+  mutate(academic_background=ifelse(academic_background=="Electronics Engineering", "Physical Science", academic_background)) %>% 
+  # rewrite all variable to factor
+  mutate(
+    first_lang = as.factor(first_lang),
+    first_lang_time=as.factor(first_lang_time),
+    first_lang_method=as.factor(first_lang_method),
+    employ_import=as.factor(employ_import),
+    academic_background=as.factor(academic_background),
+    preference=as.factor(preference))
+# export the clean data csv file
+write_csv(clean_df, "../data/clean_survey_data.csv")
+```
+
